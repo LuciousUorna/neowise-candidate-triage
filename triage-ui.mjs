@@ -1,4 +1,4 @@
-// Чистая презентационная логика страницы: ответ API → что показать менеджеру.
+// Чистая презентационная логика страницы: по ответу API решаем, что увидит менеджер.
 // Без DOM и без сети, поэтому проверяется обычным `node --test`.
 
 const TOPIC_LABELS = {
@@ -7,17 +7,13 @@ const TOPIC_LABELS = {
   other: "Другое",
 };
 
-const FALLBACK_MESSAGES = {
+// Текст для менеджера живёт здесь: API возвращает только статус.
+const MESSAGES = {
   manual_review: "Автоматический разбор не удался. Разберите заявку вручную.",
-  invalid_input: "Проверьте текст заявки.",
+  invalid_input: "Текст заявки пустой или не распознан. Проверьте и отправьте снова.",
   service_error: "Сервис ответил неожидаемым образом. Разберите заявку вручную.",
   network_error: "Сервис недоступен или не ответил. Разберите заявку вручную.",
 };
-
-function message(body, kind) {
-  const own = body?.message;
-  return typeof own === "string" && own.trim() !== "" ? own : FALLBACK_MESSAGES[kind];
-}
 
 /** Состояние «запрос ушёл»: черновик уже очищен, менеджер не видит старый текст. */
 export function viewPending() {
@@ -29,7 +25,7 @@ export function viewNetworkError() {
   return {
     kind: "network_error",
     title: "Нужен ручной разбор",
-    message: FALLBACK_MESSAGES.network_error,
+    message: MESSAGES.network_error,
     topic: "",
     draft: "",
   };
@@ -53,7 +49,7 @@ export function viewForResponse(httpStatus, body) {
     return {
       kind: "manual_review",
       title: "Нужен ручной разбор",
-      message: message(body, "manual_review"),
+      message: MESSAGES.manual_review,
       topic: "",
       draft: "",
     };
@@ -62,7 +58,7 @@ export function viewForResponse(httpStatus, body) {
     return {
       kind: "invalid_input",
       title: "Заявка не принята",
-      message: message(body, "invalid_input"),
+      message: MESSAGES.invalid_input,
       topic: "",
       draft: "",
     };
@@ -70,7 +66,7 @@ export function viewForResponse(httpStatus, body) {
   return {
     kind: "service_error",
     title: "Нужен ручной разбор",
-    message: message(body, "service_error"),
+    message: MESSAGES.service_error,
     topic: "",
     draft: "",
   };
