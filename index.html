@@ -8,7 +8,17 @@
     body { max-width: 40rem; margin: 2rem auto; padding: 0 1rem; font: 1rem/1.5 system-ui, sans-serif; }
     textarea { box-sizing: border-box; display: block; width: 100%; margin: .5rem 0; padding: .5rem; font: inherit; }
     button { padding: .4rem .8rem; font: inherit; }
+    button[disabled] { opacity: .6; }
     pre { white-space: pre-wrap; }
+    #outcome { margin-top: 1.5rem; border-left: .25rem solid #bbb; padding: .25rem 0 .25rem .75rem; }
+    #outcome h2 { margin: 0; font-size: 1.05rem; }
+    #outcome p { margin: .25rem 0; }
+    #outcome.ready { border-color: #2e7d32; }
+    #outcome.manual_review, #outcome.network_error, #outcome.service_error { border-color: #c62828; }
+    #outcome.invalid_input { border-color: #ef6c00; }
+    #draft-block { margin-top: .75rem; }
+    #draft-block h3 { margin: 0 0 .25rem; font-size: .95rem; }
+    #draft { background: #f5f5f5; padding: .5rem; }
   </style>
 </head>
 <body>
@@ -16,20 +26,64 @@
   <form>
     <label for="message">Текст заявки</label>
     <textarea id="message" rows="4"></textarea>
-    <button type="submit">Разобрать заявку</button>
+    <button type="submit" id="submit">Разобрать заявку</button>
   </form>
-  <pre id="result" aria-live="polite"></pre>
+
+  <section id="outcome" aria-live="polite">
+    <h2 id="outcome-title"></h2>
+    <p id="outcome-topic"></p>
+    <p id="outcome-message"></p>
+    <div id="draft-block" hidden>
+      <h3>Черновик ответа</h3>
+      <pre id="draft"></pre>
+    </div>
+  </section>
+
   <script type="module">
+    import { viewForResponse, viewNetworkError, viewPending } from "./triage-ui.mjs";
+
+    const CLIENT_TIMEOUT_MS = 5_000;
+
     const form = document.querySelector("form");
-    const result = document.querySelector("#result");
+    const input = document.querySelector("#message");
+    const submit = document.querySelector("#submit");
+    const outcome = document.querySelector("#outcome");
+    const title = document.querySelector("#outcome-title");
+    const topic = document.querySelector("#outcome-topic");
+    const message = document.querySelector("#outcome-message");
+    const draftBlock = document.querySelector("#draft-block");
+    const draft = document.querySelector("#draft");
+
+    function render(view) {
+      outcome.className = view.kind;
+      title.textContent = view.title;
+      topic.textContent = view.topic === "" ? "" : `Тема: ${view.topic}`;
+      message.textContent = view.message;
+      draft.textContent = view.draft;
+      draftBlock.hidden = view.draft === "";
+    }
+
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
-      const reply = await fetch("/api/triage", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: document.querySelector("#message").value }),
-      });
-      result.textContent = JSON.stringify(await reply.json(), null, 2);
+
+      // Старый черновик убираем до запроса: менеджер не должен видеть
+      // результат предыдущей заявки рядом с новой.
+      render(viewPending());
+      submit.disabled = true;
+
+      try {
+        const reply = await fetch("/api/triage", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text: input.value }),
+          signal: AbortSignal.timeout(CLIENT_TIMEOUT_MS),
+        });
+        render(viewForResponse(reply.status, await reply.json()));
+      } catch {
+        render(viewNetworkError());
+      } finally {
+        submit.disabled = false;
+      }
     });
   </script>
 </body>
